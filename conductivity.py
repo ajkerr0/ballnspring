@@ -4,69 +4,34 @@
 @author: Alex Kerr
 """
 
-import itertools
-from copy import deepcopy
-
 import numpy as np
 import scipy.linalg as linalg
 
-def calculate_thermal_conductivity(mol, driverList, baseSize, gamma):
+def kappa(m, k, drivers, crossings):
+    """Return the thermal conductivity of the mass system
+    
+    Arguments:
+        m (array-like): 1D array of the masses of the system.
+        k (array-like): 2D, symmetric [square] array of the spring constants of the system.
+            Also known as the Hessian.  Indexed like m.  The dimensions of this array relative to m
+            determines the number of degrees of freedom for the masses.
+        drivers (array-like): 2D array of atomic indices driven, corresponding to 2 separate interfaces."""
     
     #give each driver the same drag constant (Calculation gamma)
+    gamma = 10.
+    
+    dim = len(k)//len(m)
     
     #standardize the driverList
-    driverList = np.array(driverList)
+    drivers = np.array(drivers)
     
-    stapled_index = 30
-#    stapled_index=None
+    g = _calculate_gamma_mat(dim, len(m), gamma, drivers)
     
-    from .operation import _calculate_hessian
-    kMatrix = _calculate_hessian(mol, stapled_index, numgrad=False)
+    m = np.diag(np.repeat(m,dim))
     
-    gMatrix = _calculate_gamma_mat(len(mol), gamma, driverList)
+    val, vec = _calculate_thermal_evec(k, g, m)
     
-    mMatrix = _calculate_mass_mat(mol.zList)
-    
-    val, vec = _calculate_thermal_evec(kMatrix, gMatrix, mMatrix)
-    
-    coeff = _calculate_coeff(val, vec, mMatrix, gMatrix)
-    
-    
-    #find interactions that cross an interface        
-    crossings = []
-    atoms0 = mol.faces[0].attached
-    atoms1 = mol.faces[1].attached
-    
-    if mol.ff.dihs:
-        interactions = mol.dihList
-    elif mol.ff.angles:
-        interactions = mol.angleList
-    elif mol.ff.lengths:
-        interactions = mol.bondList
-
-    for it in interactions:
-        for atom in atoms0:
-            if atom in it:
-                #find elements that are part of the base molecule
-                #if there are any, then add them to interactions
-                elements = [x for x in it if x < baseSize]
-                for element in elements:
-                    crossings.append([atom, element])
-        for atom in atoms1:
-            if atom in it:
-                elements = [x for x in it if x < baseSize]
-                for element in elements:
-                    crossings.append([element, atom])
-                    
-    #add nonbonded interactions
-    ''' to 
-        be 
-        completed '''
-                    
-    #remove duplicate interactions
-    crossings.sort()
-    crossings = list(k for k,_ in itertools.groupby(crossings))
-    print(crossings)
+    coeff = _calculate_coeff(val, vec, m, g)
          
     #initialize the thermal conductivity value
     kappa = 0.
@@ -76,10 +41,10 @@ def calculate_thermal_conductivity(mol, driverList, baseSize, gamma):
                 
     for crossing in crossings:
         i,j = crossing
-        kappa += _calculate_power(i,j,val, vec, coeff, kMatrix, driverList, mullenTable)
+        kappa += _calculate_power(i,j,dim, val, vec, coeff, k, drivers, mullenTable)
 #        kappa += _calculate_power_loop(i,j,val, vec, coeff, kMatrix, driverList, mullenTable)
     
-    inspect(mol, val, vec, kMatrix, crossings, mullenTable)
+#    inspect(mol, val, vec, k, crossings, mullenTable)
 
 #    import pprint
 #    pprint.pprint(mullenTable)
@@ -87,7 +52,7 @@ def calculate_thermal_conductivity(mol, driverList, baseSize, gamma):
     return kappa
 #    return kappa, mullenTable
     
-def _calculate_power_loop(i,j, val, vec, coeff, kMatrix, driverList, mullenTable):
+def _calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList, mullenTable):
     
     driver1 = driverList[1]    
     
@@ -95,8 +60,8 @@ def _calculate_power_loop(i,j, val, vec, coeff, kMatrix, driverList, mullenTable
     
     kappa = 0.
     
-    for idim in [0,1,2]:
-        for jdim in [0,1,2]:
+    for idim in range(dim):
+        for jdim in range(dim):
             for driver in driver1:
                 term = 0.
                 for sigma in range(2*n):
@@ -116,7 +81,7 @@ def _calculate_power_loop(i,j, val, vec, coeff, kMatrix, driverList, mullenTable
             
     return kappa
     
-def _calculate_power(i,j, val, vec, coeff, kMatrix, driverList, mullenTable):
+def _calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList, mullenTable):
     
     #assuming same drag constant as other driven atom
     driver1 = driverList[1]
@@ -132,8 +97,8 @@ def _calculate_power(i,j, val, vec, coeff, kMatrix, driverList, mullenTable):
         valterm = np.true_divide(val_sigma-val_tau,val_sigma+val_tau)
     valterm[~np.isfinite(valterm)] = 0.
     
-    for idim in [0,1,2]:
-        for jdim in [0,1,2]:
+    for idim in range(dim):
+        for jdim in range(dim):
             
             term3 = np.tile(vec[3*i + idim,:], (n,1))
             term4 = np.transpose(np.tile(vec[3*j + jdim,:], (n,1)))
@@ -200,17 +165,6 @@ def _calculate_thermal_evec(K,G,M):
     w,vr = linalg.eig(c,b=z,right=True)
     
     return w,vr
-    
-def _calculate_mass_mat(zList):
-    
-    massList = []
-    
-    for z in zList:
-        massList.append(amuDict[z])
-        
-    diagonal = np.repeat(np.array(massList), 3)
-    
-    return np.diag(diagonal)
     
 def _calculate_gamma_mat(N,gamma, driverList):
     
