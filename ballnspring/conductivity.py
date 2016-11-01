@@ -7,7 +7,7 @@
 import numpy as np
 import scipy.linalg as linalg
 
-def kappa(m, k, drivers, crossings):
+def kappa(m, k, drivers, crossings, gamma=10.):
     """Return the thermal conductivity of the mass system
     
     Arguments:
@@ -15,10 +15,9 @@ def kappa(m, k, drivers, crossings):
         k (array-like): 2D, symmetric [square] array of the spring constants of the system.
             Also known as the Hessian.  Indexed like m.  The dimensions of this array relative to m
             determines the number of degrees of freedom for the masses.
-        drivers (array-like): 2D array of atomic indices driven, corresponding to 2 separate interfaces."""
-    
-    #give each driver the same drag constant (Calculation gamma)
-    gamma = 10.
+        drivers (array-like): 2D array of atomic indices driven, corresponding to 2 separate interfaces.
+    Keywords:
+        gamma (float): Drag coefficient in the calculation, applied to every driver uniformly."""
     
     dim = len(k)//len(m)
     
@@ -35,24 +34,15 @@ def kappa(m, k, drivers, crossings):
          
     #initialize the thermal conductivity value
     kappa = 0.
-    
-#    mullenTable = []
-    mullenTable = None
                 
     for crossing in crossings:
         i,j = crossing
-        kappa += _calculate_power(i,j,dim, val, vec, coeff, k, drivers, mullenTable)
-#        kappa += _calculate_power_loop(i,j,val, vec, coeff, kMatrix, driverList, mullenTable)
+        kappa += _calculate_power(i,j,dim, val, vec, coeff, k, drivers)
+#        kappa += _calculate_power_loop(i,j,val, vec, coeff, kMatrix, driverList)
     
-#    inspect(mol, val, vec, k, crossings, mullenTable)
-
-#    import pprint
-#    pprint.pprint(mullenTable)
-    print(kappa)
     return kappa
-#    return kappa, mullenTable
     
-def _calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList, mullenTable):
+def _calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
     driver1 = driverList[1]    
     
@@ -69,19 +59,15 @@ def _calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList, mullenT
                     for tau in range(2*n):
                         cotau = coeff[tau, 3*driver] + coeff[tau, 3*driver+1] + coeff[tau, 3*driver+2]
                         try:
-                            test= kMatrix[3*i + idim, 3*j + jdim]*(cosigma*cotau*(vec[:n,:][3*i + idim ,sigma])*(
+                            term += kMatrix[3*i + idim, 3*j + jdim]*(cosigma*cotau*(vec[:n,:][3*i + idim ,sigma])*(
                                     vec[:n,:][3*j + jdim,tau])*((val[sigma]-val[tau])/(val[sigma]+val[tau])))
-                            if mullenTable is not None:
-                                mullenTable.append(test)
-                            term += test
                         except FloatingPointError:
                             print("Divergent term")
-#                term *= kMatrix[3*i + idim, 3*j + jdim]
                 kappa += term
             
     return kappa
     
-def _calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList, mullenTable):
+def _calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
     #assuming same drag constant as other driven atom
     driver1 = driverList[1]
@@ -107,21 +93,7 @@ def _calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList, mullenTable)
     
                 term1 = np.tile(coeff[:, 3*driver] + coeff[:, 3*driver+1] + coeff[:, 3*driver+2], (n,1))
                 term2 = np.transpose(term1)
-                
                 termArr = kMatrix[3*i + idim, 3*j + jdim]*term1*term2*term3*term4*valterm
-                if mullenTable is not None:
-#                    mullenTable.append(kMatrix[3*i + idim, 3*j +jdim])
-                #####
-#                    mullenTable.append(termArr)
-                ########
-                    large_vals = np.where(np.absolute(termArr) > 250.)
-##                    print(large_vals)
-                    for x,y in zip(large_vals[0], large_vals[1]):
-                        mullenTable.append([termArr[x, y], x, y, i, j])
-#                        mullenTable.append([term1[x,y], term2[x,y], term3[x,y], term4[x,y], val_sigma[x,y], val_tau[x,y], valterm[x,y]])
-#                        mullenTable.append(x)
-#                term = kMatrix[3*i + idim, 3*j + jdim]*np.sum(term1*term2*term3*term4*valterm)
-#                kappa += term
                 kappa += np.sum(termArr)
                 
     return kappa
@@ -166,20 +138,20 @@ def _calculate_thermal_evec(K,G,M):
     
     return w,vr
     
-def _calculate_gamma_mat(N,gamma, driverList):
+def _calculate_gamma_mat(dim, N, gamma, drivers):
     
-    gmat = np.zeros((3*N, 3*N))
-    driveList = np.hstack(driverList)
+    gmat = np.zeros((dim*N, dim*N))
+    drivers = np.hstack(drivers)
     
-    for drive_atom in driveList:
-        gmat[3*drive_atom  , 3*drive_atom  ] = gamma
-        gmat[3*drive_atom+1, 3*drive_atom+1] = gamma
-        gmat[3*drive_atom+2, 3*drive_atom+2] = gamma
+    for driver in drivers:
+        for i in range(dim):
+            gmat[3*driver + i, 3*driver + i] = gamma
         
     return gmat
     
 def _calculate_ballandspring_k_mat(N,k0,nLists):
-    """Return the Hessian of a linear chain of atoms assuming only nearest neighbor interactions."""
+    """Return the Hessian of a linear chain of atoms assuming only nearest neighbor interactions,
+    in which only similar dimensions interaction."""
     
     KMatrix = np.zeros([3*N,3*N])
     
