@@ -24,25 +24,25 @@ def kappa(m, k, drivers, crossings, gamma=10.):
     #standardize the driverList
     drivers = np.array(drivers)
     
-    g = _calculate_gamma_mat(dim, len(m), gamma, drivers)
+    g = calculate_gamma_mat(dim, len(m), gamma, drivers)
     
     m = np.diag(np.repeat(m,dim))
     
-    val, vec = _calculate_thermal_evec(k, g, m)
+    val, vec = calculate_thermal_evec(k, g, m)
     
-    coeff = _calculate_coeff(val, vec, m, g)
+    coeff = calculate_coeff(val, vec, m, g)
          
     #initialize the thermal conductivity value
     kappa = 0.
                 
     for crossing in crossings:
         i,j = crossing
-        kappa += _calculate_power(i,j,dim, val, vec, coeff, k, drivers)
-#        kappa += _calculate_power_loop(i,j,val, vec, coeff, kMatrix, driverList)
+        kappa += calculate_power(i,j,dim, val, vec, coeff, k, drivers)
+#        kappa += calculate_power_loop(i,j,val, vec, coeff, kMatrix, driverList)
     
     return kappa
     
-def _calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList):
+def calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
     driver1 = driverList[1]    
     
@@ -67,7 +67,7 @@ def _calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList):
             
     return kappa
     
-def _calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList):
+def calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
     #assuming same drag constant as other driven atom
     driver1 = driverList[1]
@@ -98,7 +98,7 @@ def _calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList):
                 
     return kappa
     
-def _calculate_coeff(val, vec, massMat, gMat):
+def calculate_coeff(val, vec, massMat, gMat):
     """Return the 2N x N Green's function coefficient matrix."""
     
     N = len(vec)//2
@@ -120,7 +120,7 @@ def _calculate_coeff(val, vec, massMat, gMat):
 
     return np.linalg.solve(A,B)
     
-def _calculate_thermal_evec(K,G,M):
+def calculate_thermal_evec(K,G,M):
     
     N = len(M)
     
@@ -138,7 +138,7 @@ def _calculate_thermal_evec(K,G,M):
     
     return w,vr
     
-def _calculate_gamma_mat(dim, N, gamma, drivers):
+def calculate_gamma_mat(dim, N, gamma, drivers):
     
     gmat = np.zeros((dim*N, dim*N))
     drivers = np.hstack(drivers)
@@ -148,20 +148,3 @@ def _calculate_gamma_mat(dim, N, gamma, drivers):
             gmat[3*driver + i, 3*driver + i] = gamma
         
     return gmat
-    
-def _calculate_ballandspring_k_mat(N,k0,nLists):
-    """Return the Hessian of a linear chain of atoms assuming only nearest neighbor interactions,
-    in which only similar dimensions interaction."""
-    
-    KMatrix = np.zeros([3*N,3*N])
-    
-    for i,nList in enumerate(nLists):
-        KMatrix[3*i  ,3*i  ] = k0*len(nList)
-        KMatrix[3*i+1,3*i+1] = k0*len(nList)
-        KMatrix[3*i+2,3*i+2] = k0*len(nList)
-        for neighbor in nList:
-            KMatrix[3*i  ,3*neighbor] = -k0
-            KMatrix[3*i+1,3*neighbor+1] = -k0
-            KMatrix[3*i+2,3*neighbor+2] = -k0
-    
-    return KMatrix

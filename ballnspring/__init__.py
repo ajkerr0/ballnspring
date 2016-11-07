@@ -1,6 +1,3 @@
-"""
 
-@author: Alex
-"""
 
-from .conductivity import kappa
+from .conductivity import *
