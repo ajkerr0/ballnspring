@@ -90,10 +90,14 @@ def calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList):
             term4 = np.transpose(np.tile(vec[3*j + jdim,:], (n,1)))
             
             for driver in driver1:
+                
+                dterm = np.zeros((coeff.shape[0],), dtype=np.complex128)
+                for i in range(dim):
+                    dterm += coeff[:, dim*driver + i]
     
-                term1 = np.tile(coeff[:, 3*driver] + coeff[:, 3*driver+1] + coeff[:, 3*driver+2], (n,1))
+                term1 = np.tile(dterm, (n,1))
                 term2 = np.transpose(term1)
-                termArr = kMatrix[3*i + idim, 3*j + jdim]*term1*term2*term3*term4*valterm
+                termArr = kMatrix[dim*i + idim, dim*j + jdim]*term1*term2*term3*term4*valterm
                 kappa += np.sum(termArr)
                 
     return kappa
@@ -145,6 +149,6 @@ def calculate_gamma_mat(dim, N, gamma, drivers):
     
     for driver in drivers:
         for i in range(dim):
-            gmat[3*driver + i, 3*driver + i] = gamma
+            gmat[dim*driver + i, dim*driver + i] = gamma
         
     return gmat
