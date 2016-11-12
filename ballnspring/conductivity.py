@@ -7,7 +7,7 @@
 import numpy as np
 import scipy.linalg as linalg
 
-def kappa(m, k, drivers, crossings, gamma=10.):
+def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector"):
     """Return the thermal conductivity of the mass system
     
     Arguments:
@@ -17,7 +17,11 @@ def kappa(m, k, drivers, crossings, gamma=10.):
             determines the number of degrees of freedom for the masses.
         drivers (array-like): 2D array of atomic indices driven, corresponding to 2 separate interfaces.
     Keywords:
-        gamma (float): Drag coefficient in the calculation, applied to every driver uniformly."""
+        gamma (float): Drag coefficient in the calculation, applied to every driver uniformly.
+        pfunc (str): Name of function that returns the driving power for each crossing interaction.
+            'vector' uses a numpy implementation of the double sum.  'loop' uses brute-force for-loops
+            from default python.  'record' is used for tracking values, for debugging purposes.  
+            Default is 'vector'."""
     
     dim = len(k)//len(m)
     
@@ -34,13 +38,29 @@ def kappa(m, k, drivers, crossings, gamma=10.):
          
     #initialize the thermal conductivity value
     kappa = 0.
-                
-    for crossing in crossings:
-        i,j = crossing
-        kappa += calculate_power(i,j,dim, val, vec, coeff, k, drivers)
-#        kappa += calculate_power_loop(i,j,val, vec, coeff, kMatrix, driverList)
     
-    return kappa
+    if pfunc.lower() == 'list':
+        
+        table = []
+        
+        for crossing in crossings:
+            i,j = crossing
+            kappa += calculate_power_list(i, j, dim, val, vec, coeff, k, drivers, table)
+            
+        return kappa, table
+        
+    else:
+    
+        if pfunc.lower() == 'vector':
+            calculate_power = calculate_power_vector
+        elif pfunc.lower() == 'loop':
+            calculate_power = calculate_power_loop
+                    
+        for crossing in crossings:
+            i,j = crossing
+            kappa += calculate_power(i,j,dim, val, vec, coeff, k, drivers)
+    
+        return kappa
     
 def calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
@@ -55,19 +75,23 @@ def calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList):
             for driver in driver1:
                 term = 0.
                 for sigma in range(2*n):
-                    cosigma = coeff[sigma, 3*driver + 1] + coeff[sigma, 3*driver +2] + coeff[sigma, 3*driver]
+                    cosigma = 0.
+                    for k in dim:
+                        cosigma += coeff[sigma, dim*driver + k]
                     for tau in range(2*n):
-                        cotau = coeff[tau, 3*driver] + coeff[tau, 3*driver+1] + coeff[tau, 3*driver+2]
+                        cotau = 0.
+                        for k in dim:
+                            cotau += coeff[tau, dim*driver + k]
                         try:
-                            term += kMatrix[3*i + idim, 3*j + jdim]*(cosigma*cotau*(vec[:n,:][3*i + idim ,sigma])*(
-                                    vec[:n,:][3*j + jdim,tau])*((val[sigma]-val[tau])/(val[sigma]+val[tau])))
+                            term += kMatrix[dim*i + idim, dim*j + jdim]*(cosigma*cotau*(vec[:n,:][dim*i + idim ,sigma])*(
+                                    vec[:n,:][dim*j + jdim,tau])*((val[sigma]-val[tau])/(val[sigma]+val[tau])))
                         except FloatingPointError:
                             print("Divergent term")
                 kappa += term
             
     return kappa
     
-def calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList):
+def calculate_power_vector(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
     #assuming same drag constant as other driven atom
     driver1 = driverList[1]
@@ -86,18 +110,57 @@ def calculate_power(i,j, dim,val, vec, coeff, kMatrix, driverList):
     for idim in range(dim):
         for jdim in range(dim):
             
-            term3 = np.tile(vec[3*i + idim,:], (n,1))
-            term4 = np.transpose(np.tile(vec[3*j + jdim,:], (n,1)))
+            term3 = np.tile(vec[dim*i + idim,:], (n,1))
+            term4 = np.transpose(np.tile(vec[dim*j + jdim,:], (n,1)))
             
             for driver in driver1:
                 
                 dterm = np.zeros((coeff.shape[0],), dtype=np.complex128)
-                for i in range(dim):
-                    dterm += coeff[:, dim*driver + i]
+                for k in range(dim):
+                    dterm += coeff[:, dim*driver + k]
     
                 term1 = np.tile(dterm, (n,1))
                 term2 = np.transpose(term1)
                 termArr = kMatrix[dim*i + idim, dim*j + jdim]*term1*term2*term3*term4*valterm
+                kappa += np.sum(termArr)
+                
+    return kappa
+    
+def calculate_power_list(i, j, dim, val, vec, coeff, kMatrix, driverList, table):
+    
+    #assuming same drag constant as other driven atom
+    driver1 = driverList[1]
+    
+    n = len(val)
+    
+    kappa = 0.
+    
+    val_sigma = np.tile(val, (n,1))
+    val_tau = np.transpose(val_sigma)
+    
+    with np.errstate(divide="ignore", invalid="ignore"):
+        valterm = np.true_divide(val_sigma-val_tau,val_sigma+val_tau)
+    valterm[~np.isfinite(valterm)] = 0.
+    
+    for idim in range(dim):
+        for jdim in range(dim):
+            
+            term3 = np.tile(vec[dim*i + idim,:], (n,1))
+            term4 = np.transpose(np.tile(vec[dim*j + jdim,:], (n,1)))
+            
+            for driver in driver1:
+                
+                dterm = np.zeros((coeff.shape[0],), dtype=np.complex128)
+                for k in range(dim):
+                    dterm += coeff[:, dim*driver + k]
+    
+                term1 = np.tile(dterm, (n,1))
+                term2 = np.transpose(term1)
+                termArr = kMatrix[dim*i + idim, dim*j + jdim]*term1*term2*term3*term4*valterm
+                
+                #add values to table
+                table.append(termArr)
+                
                 kappa += np.sum(termArr)
                 
     return kappa
