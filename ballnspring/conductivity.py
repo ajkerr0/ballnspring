@@ -159,7 +159,13 @@ def calculate_power_list(i, j, dim, val, vec, coeff, kMatrix, driverList, table)
                 termArr = kMatrix[dim*i + idim, dim*j + jdim]*term1*term2*term3*term4*valterm
                 
                 #add values to table
-                table.append(termArr)
+#                table.append(termArr)
+                #add indices of top m values
+                m = 3
+                max_indices = np.argpartition(termArr.flatten(), -m)[-m:]
+                max_indices = np.vstack(np.unravel_index(max_indices, termArr.shape)).T
+                for sigma, tau in max_indices:
+                    table.append([termArr[sigma, tau], sigma, tau, dim*i + idim, dim*j + jdim])
                 
                 kappa += np.sum(termArr)
                 
