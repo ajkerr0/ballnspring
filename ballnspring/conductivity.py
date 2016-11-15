@@ -6,6 +6,7 @@
 
 import numpy as np
 import scipy.linalg as linalg
+#import scipy.sparse.linalg as slinalg
 
 def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector"):
     """Return the thermal conductivity of the mass system
@@ -34,7 +35,7 @@ def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector"):
     
     val, vec = calculate_thermal_evec(k, g, m)
     
-    coeff = calculate_coeff(val, vec, m, g)
+    coeff = calculate_coeff(val, vec, np.diag(m), np.diag(g))
          
     #initialize the thermal conductivity value
     kappa = 0.
@@ -66,7 +67,7 @@ def calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
     driver1 = driverList[1]    
     
-    n = len(val)//2
+    n = val.shape[0]//2
     
     kappa = 0.
     
@@ -96,7 +97,7 @@ def calculate_power_vector(i,j, dim,val, vec, coeff, kMatrix, driverList):
     #assuming same drag constant as other driven atom
     driver1 = driverList[1]
     
-    n = len(val)
+    n = val.shape[0]
     
     kappa = 0.
     
@@ -131,7 +132,7 @@ def calculate_power_list(i, j, dim, val, vec, coeff, kMatrix, driverList, table)
     #assuming same drag constant as other driven atom
     driver1 = driverList[1]
     
-    n = len(val)
+    n = val.shape[0]
     
     kappa = 0.
     
@@ -171,43 +172,47 @@ def calculate_power_list(i, j, dim, val, vec, coeff, kMatrix, driverList, table)
                 
     return kappa
     
-def calculate_coeff(val, vec, massMat, gMat):
-    """Return the 2N x N Green's function coefficient matrix."""
+def calculate_coeff(val, vec, mass, gamma):
+    """Return the M x N Green's function coefficient matrix;
+    N is the number of coordinates in the problem, M is the number of
+    eigenmodes."""
     
-    N = len(vec)//2
+    N = vec.shape[0]//2
+    M = vec.shape[1]
     
     #need to determine coefficients in eigenfunction/vector expansion
     # need linear solver to solve equations from notes
     # AX = B where X is the matrix of expansion coefficients
     
-    A = np.zeros((2*N, 2*N), dtype=complex)
+    A = np.zeros((2*N, M), dtype=np.complex128)
     A[:N,:] = vec[:N,:]
-
+    
     #adding mass and damping terms to A
-    lamda = np.tile(val, (N,1))
-
-    A[N:,:] = np.multiply(A[:N,:], np.dot(massMat,lamda) + np.dot(gMat,np.ones((N,2*N))))
+    lambda_ = np.tile(val, (N,1))
+    
+    A[N:,:] = np.multiply(A[:N,:], np.tile(mass, (M,1)).T*lambda_ + np.tile(gamma, (M,1)).T)
     
     #now prep B
-    B = np.concatenate((np.zeros((N,N)), np.identity(N)), axis=0)
+    B = np.concatenate((np.zeros((N,N)), np.eye(N)), axis=0)
 
     return np.linalg.solve(A,B)
     
 def calculate_thermal_evec(K,G,M):
     
-    N = len(M)
+    N = M.shape[0]
     
-    a = np.zeros([N,N])
+    a = np.zeros((N,N))
     a = np.concatenate((a,np.identity(N)),axis=1)
     b = np.concatenate((K,G),axis=1)
     c = np.concatenate((a,b),axis=0)
     
     x = np.identity(N)
-    x = np.concatenate((x,np.zeros([N,N])),axis=1)
-    y = np.concatenate((np.zeros([N,N]),-M),axis=1)
+    x = np.concatenate((x,np.zeros((N,N))),axis=1)
+    y = np.concatenate((np.zeros((N,N)),-M),axis=1)
     z = np.concatenate((x,y),axis=0)
     
     w,vr = linalg.eig(c,b=z,right=True)
+#    w,vr = slinalg.eigs(c, M=z, k=50)
     
     return w,vr
     
