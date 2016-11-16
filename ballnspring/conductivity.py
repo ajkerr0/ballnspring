@@ -6,9 +6,9 @@
 
 import numpy as np
 import scipy.linalg as linalg
-#import scipy.sparse.linalg as slinalg
+import scipy.sparse.linalg as slinalg
 
-def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector"):
+def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector", sparse=False):
     """Return the thermal conductivity of the mass system
     
     Arguments:
@@ -33,9 +33,11 @@ def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector"):
     
     m = np.diag(np.repeat(m,dim))
     
-    val, vec = calculate_thermal_evec(k, g, m)
+    val, vec = calculate_thermal_evec(k, g, m, sparse=sparse)
     
-    coeff = calculate_coeff(val, vec, np.diag(m), np.diag(g))
+    coeff = calculate_coeff(val, vec, np.diag(m), np.diag(g), sparse=sparse)
+    
+    print(coeff.shape)
          
     #initialize the thermal conductivity value
     kappa = 0.
@@ -172,7 +174,7 @@ def calculate_power_list(i, j, dim, val, vec, coeff, kMatrix, driverList, table)
                 
     return kappa
     
-def calculate_coeff(val, vec, mass, gamma):
+def calculate_coeff(val, vec, mass, gamma, sparse=False):
     """Return the M x N Green's function coefficient matrix;
     N is the number of coordinates in the problem, M is the number of
     eigenmodes."""
@@ -195,26 +197,29 @@ def calculate_coeff(val, vec, mass, gamma):
     #now prep B
     B = np.concatenate((np.zeros((N,N)), np.eye(N)), axis=0)
 
-    return np.linalg.solve(A,B)
+    if sparse:
+        return np.linalg.lstsq(A,B)[0]
+    else:
+        return np.linalg.solve(A,B)
     
-def calculate_thermal_evec(K,G,M):
+def calculate_thermal_evec(K, G, M, sparse=False):
     
     N = M.shape[0]
     
     a = np.zeros((N,N))
-    a = np.concatenate((a,np.identity(N)),axis=1)
+    a = np.concatenate((a,np.eye(N)),axis=1)
     b = np.concatenate((K,G),axis=1)
     c = np.concatenate((a,b),axis=0)
     
-    x = np.identity(N)
+    x = np.eye(N)
     x = np.concatenate((x,np.zeros((N,N))),axis=1)
     y = np.concatenate((np.zeros((N,N)),-M),axis=1)
     z = np.concatenate((x,y),axis=0)
     
-    w,vr = linalg.eig(c,b=z,right=True)
-#    w,vr = slinalg.eigs(c, M=z, k=50)
-    
-    return w,vr
+    if sparse:
+        return slinalg.eigs(c, M=z, k=200,) #which='SM')
+    else:
+        return linalg.eig(c,b=z,right=True)
     
 def calculate_gamma_mat(dim, N, gamma, drivers):
     
