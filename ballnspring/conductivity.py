@@ -24,20 +24,18 @@ def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector", sparse=False):
             from default python.  'record' is used for tracking values, for debugging purposes.  
             Default is 'vector'."""
     
-    dim = len(k)//len(m)
+    dim = k.shape[0]//m.shape[0]
     
     #standardize the driverList
     drivers = np.array(drivers)
     
-    g = calculate_gamma_mat(dim, len(m), gamma, drivers)
+    g = calculate_gamma_mat(dim, m.shape[0], gamma, drivers)
     
     m = np.diag(np.repeat(m,dim))
     
     val, vec = calculate_thermal_evec(k, g, m, sparse=sparse)
     
     coeff = calculate_coeff(val, vec, np.diag(m), np.diag(g), sparse=sparse)
-    
-    print(coeff.shape)
          
     #initialize the thermal conductivity value
     kappa = 0.
@@ -124,8 +122,8 @@ def calculate_power_vector(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
                 term1 = np.tile(dterm, (n,1))
                 term2 = np.transpose(term1)
-                termArr = kMatrix[dim*i + idim, dim*j + jdim]*term1*term2*term3*term4*valterm
-                kappa += np.sum(termArr)
+                termArr = term1*term2*term3*term4*valterm
+                kappa += kMatrix[dim*i + idim, dim*j + jdim]*np.sum(termArr)
                 
     return kappa
     
@@ -161,14 +159,17 @@ def calculate_power_list(i, j, dim, val, vec, coeff, kMatrix, driverList, table)
                 term2 = np.transpose(term1)
                 termArr = kMatrix[dim*i + idim, dim*j + jdim]*term1*term2*term3*term4*valterm
                 
-                #add values to table
+                #add whole arrays to table
 #                table.append(termArr)
                 #add indices of top m values
                 m = 3
                 max_indices = np.argpartition(termArr.flatten(), -m)[-m:]
                 max_indices = np.vstack(np.unravel_index(max_indices, termArr.shape)).T
                 for sigma, tau in max_indices:
-                    table.append([termArr[sigma, tau], sigma, tau, dim*i + idim, dim*j + jdim])
+                    table.append([sigma, tau, 
+                                  termArr[sigma, tau], kMatrix[dim*i + idim, dim*j + jdim],
+                                  term1[sigma, tau], term2[sigma, tau], term3[sigma, tau], term4[sigma, tau],
+                                  dim*i + idim, dim*j + jdim])
                 
                 kappa += np.sum(termArr)
                 
