@@ -23,6 +23,9 @@ def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector", sparse=False):
             'vector' uses a numpy implementation of the double sum.  'loop' uses brute-force for-loops
             from default python.  'record' is used for tracking values, for debugging purposes.  
             Default is 'vector'."""
+            
+    m = np.asarray(m)
+    k = np.asarray(k)
     
     dim = k.shape[0]//m.shape[0]
     
@@ -162,14 +165,25 @@ def calculate_power_list(i, j, dim, val, vec, coeff, kMatrix, driverList, table)
                 #add whole arrays to table
 #                table.append(termArr)
                 #add indices of top m values
-                m = 3
+                m = 2
                 max_indices = np.argpartition(termArr.flatten(), -m)[-m:]
                 max_indices = np.vstack(np.unravel_index(max_indices, termArr.shape)).T
                 for sigma, tau in max_indices:
-                    table.append([sigma, tau, 
-                                  termArr[sigma, tau], kMatrix[dim*i + idim, dim*j + jdim],
-                                  term1[sigma, tau], term2[sigma, tau], term3[sigma, tau], term4[sigma, tau],
-                                  dim*i + idim, dim*j + jdim])
+                    tdict = {}
+                    tdict['sigma'] = sigma
+                    tdict['tau'] = tau
+                    tdict['kappa'] = termArr[sigma, tau]
+                    tdict['k'] = kMatrix[dim*i + idim, dim*j + jdim]
+                    tdict['c1'] = term1[sigma, tau]
+                    tdict['c2'] = term2[sigma, tau]
+                    tdict['a1'] = term3[sigma, tau]
+                    tdict['a2'] = term4[sigma, tau]
+                    tdict['val_num'] = val_sigma[sigma,tau]-val_tau[sigma,tau]
+                    tdict['val_den'] = val_sigma[sigma,tau]+val_tau[sigma,tau]
+                    tdict['val_term'] = valterm[sigma,tau]
+                    tdict['i'] = dim*i + idim
+                    tdict['j'] = dim*j + jdim
+                    table.append(tdict)
                 
                 kappa += np.sum(termArr)
                 
