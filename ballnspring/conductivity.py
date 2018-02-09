@@ -8,7 +8,8 @@ import numpy as np
 import scipy.linalg as linalg
 import scipy.sparse.linalg as slinalg
 
-def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector", sparse=False):
+def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector", sparse=False,
+          damped=None):
     """Return the thermal conductivity of the mass system
     
     Arguments:
@@ -17,12 +18,17 @@ def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector", sparse=False):
             Also known as the Hessian.  Indexed like m.  The dimensions of this array relative to m
             determines the number of degrees of freedom for the masses.
         drivers (array-like): 2D array of atomic indices driven, corresponding to 2 separate interfaces.
+            These are always damped by a gamma factor.
     Keywords:
         gamma (float): Drag coefficient in the calculation, applied to every driver uniformly.
         pfunc (str): Name of function that returns the driving power for each crossing interaction.
             'vector' uses a numpy implementation of the double sum.  'loop' uses brute-force for-loops
             from default python.  'record' is used for tracking values, for debugging purposes.  
-            Default is 'vector'."""
+            Default is 'vector'.
+        sparse (bool): Indicates if the calculation will use the numpy sparse matrix routines.
+            Currently not functional.
+        damped (array-like): List of additional masses that are damped with a gamma factor.
+        """
             
     m = np.asarray(m)
     k = np.asarray(k)
@@ -32,7 +38,7 @@ def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector", sparse=False):
     #standardize the driverList
     drivers = np.array(drivers)
     
-    g = calculate_gamma_mat(dim, m.shape[0], gamma, drivers)
+    g = calculate_gamma_mat(dim, m.shape[0], gamma, drivers, damped)
     
     m = np.diag(np.repeat(m,dim))
     
@@ -63,12 +69,15 @@ def kappa(m, k, drivers, crossings, gamma=10., pfunc="vector", sparse=False):
         for crossing in crossings:
             i,j = crossing
             kappa += calculate_power(i,j,dim, val, vec, coeff, k, drivers)
+#            zz = calculate_power(i1,j,dim, val, vec, coeff, k, drivers)
+#            print(zz)
+#            kappa += zz
     
         return kappa
     
 def calculate_power_loop(i,j, dim,val, vec, coeff, kMatrix, driverList):
     
-    driver1 = driverList[1]    
+    driver1 = driverList[0]    
     
     n = val.shape[0]//2
     
@@ -236,7 +245,7 @@ def calculate_thermal_evec(K, G, M, sparse=False):
     else:
         return linalg.eig(c,b=z,right=True)
     
-def calculate_gamma_mat(dim, N, gamma, drivers):
+def calculate_gamma_mat(dim, N, gamma, drivers, damped):
     
     gmat = np.zeros((dim*N, dim*N))
     drivers = np.hstack(drivers)
@@ -244,5 +253,11 @@ def calculate_gamma_mat(dim, N, gamma, drivers):
     for driver in drivers:
         for i in range(dim):
             gmat[dim*driver + i, dim*driver + i] = gamma
+            
+    if damped is not None:
+        
+        for dampi  in damped:
+            for i in range(dim):
+                gmat[dim*dampi + i, dim*dampi + i] = gamma
         
     return gmat
